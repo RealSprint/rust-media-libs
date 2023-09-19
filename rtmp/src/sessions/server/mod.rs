@@ -354,7 +354,7 @@ impl ServerSession {
             ],
         };
 
-        let payload = message.into_message_payload(self.get_epoch(), stream_id)?;
+        let payload = message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let packet = self.serializer.serialize(&payload, false, false)?;
         Ok(packet)
     }
@@ -1148,7 +1148,7 @@ impl ServerSession {
             additional_arguments: vec![Amf0Value::Object(additional_properties)],
         };
 
-        let payload = message.into_message_payload(self.get_epoch(), 0)?;
+        let payload = message.into_message_payload(RtmpTimestamp::new(0), 0)?;
         let packet = self.serializer.serialize(&payload, false, false)?;
 
         Ok(vec![ServerSessionResult::OutboundResponse(packet)])
@@ -1323,7 +1323,7 @@ impl ServerSession {
             additional_arguments,
         };
 
-        let payload = message.into_message_payload(self.get_epoch(), stream_id)?;
+        let payload = message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let packet = self.serializer.serialize(&payload, false, false)?;
         Ok(packet)
     }
