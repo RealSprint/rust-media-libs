@@ -828,7 +828,7 @@ fn can_accept_play_command_with_no_optional_parameters_to_requested_stream_key()
 
     let accept_results = session.accept_request(request_id).unwrap();
     let (mut responses, _) = split_results(&mut deserializer, accept_results);
-    assert_eq!(responses.len(), 5, "Unexpected number of messages received");
+    assert_eq!(responses.len(), 4, "Unexpected number of messages received");
 
     verify_is_onstatus(&responses.remove(0).1, "status", "NetStream.Play.Reset");
 
@@ -881,33 +881,6 @@ fn can_accept_play_command_with_no_optional_parameters_to_requested_stream_key()
             "Expected RtmpSampleAccess data argument, instead received: {:?}",
             x
         ),
-    }
-
-    match responses.remove(0) {
-        (_, RtmpMessage::Amf0Data { mut values }) => {
-            assert_eq!(values.len(), 2, "Unexpected number of values received");
-            assert_eq!(
-                values[0],
-                Amf0Value::Utf8String("onStatus".to_string()),
-                "Unexpected first data argument"
-            );
-            match values.remove(1) {
-                Amf0Value::Object(ref properties) => {
-                    assert_eq!(
-                        properties.get("code"),
-                        Some(&Amf0Value::Utf8String("NetStream.Data.Start".to_string())),
-                        "Unexpected code value"
-                    );
-                }
-
-                x => panic!(
-                    "Expected object for 2nd data argument, instead received: {:?}",
-                    x
-                ),
-            }
-        }
-
-        x => panic!("Expected onStatus data argument, instead received: {:?}", x),
     }
 }
 

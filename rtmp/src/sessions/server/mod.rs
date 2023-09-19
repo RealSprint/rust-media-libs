@@ -1269,19 +1269,6 @@ impl ServerSession {
             ],
         };
 
-        let mut data_start_properties = HashMap::new();
-        data_start_properties.insert(
-            "code".to_string(),
-            Amf0Value::Utf8String("NetStream.Data.Start".to_string()),
-        );
-
-        let data2_message = RtmpMessage::Amf0Data {
-            values: vec![
-                Amf0Value::Utf8String("onStatus".to_string()),
-                Amf0Value::Object(data_start_properties),
-            ],
-        };
-
         let stream_begin_payload =
             stream_begin_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let stream_begin_packet = self
@@ -1294,18 +1281,18 @@ impl ServerSession {
         let data1_payload = data1_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let data1_packet = self.serializer.serialize(&data1_payload, false, false)?;
 
-        let data2_payload = data2_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
-        let data2_packet = self.serializer.serialize(&data2_payload, false, false)?;
-
         let reset_payload = reset_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let reset_packet = self.serializer.serialize(&reset_payload, false, false)?;
 
         Ok(vec![
+            // NetStream.Play.Reset
             ServerSessionResult::OutboundResponse(reset_packet),
+            // UserControlEventType::StreamBegin
             ServerSessionResult::OutboundResponse(stream_begin_packet),
+            // NetStream.Play.Start
             ServerSessionResult::OutboundResponse(start_packet),
+            // |RtmpSampleAccess
             ServerSessionResult::OutboundResponse(data1_packet),
-            ServerSessionResult::OutboundResponse(data2_packet),
         ])
     }
 
