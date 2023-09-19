@@ -1283,21 +1283,21 @@ impl ServerSession {
         };
 
         let stream_begin_payload =
-            stream_begin_message.into_message_payload(self.get_epoch(), stream_id)?;
+            stream_begin_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let stream_begin_packet = self
             .serializer
             .serialize(&stream_begin_payload, false, false)?;
 
-        let start_payload = start_message.into_message_payload(self.get_epoch(), stream_id)?;
+        let start_payload = start_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let start_packet = self.serializer.serialize(&start_payload, false, false)?;
 
-        let data1_payload = data1_message.into_message_payload(self.get_epoch(), stream_id)?;
+        let data1_payload = data1_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let data1_packet = self.serializer.serialize(&data1_payload, false, false)?;
 
-        let data2_payload = data2_message.into_message_payload(self.get_epoch(), stream_id)?;
+        let data2_payload = data2_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let data2_packet = self.serializer.serialize(&data2_payload, false, false)?;
 
-        let reset_payload = reset_message.into_message_payload(self.get_epoch(), stream_id)?;
+        let reset_payload = reset_message.into_message_payload(RtmpTimestamp::new(0), stream_id)?;
         let reset_packet = self.serializer.serialize(&reset_payload, false, false)?;
 
         Ok(vec![
