@@ -1182,15 +1182,15 @@ impl ServerSession {
 
         let stream_begin_message = RtmpMessage::UserControl {
             event_type: UserControlEventType::StreamBegin,
-            // User Control messages SHOULD use message stream ID 0 (known as the control stream)
-            // https://rtmp.veriskope.com/docs/spec/#62-user-control-messages-4
-            stream_id: Some(0),
+            stream_id: Some(stream_id),
             buffer_length: None,
             timestamp: None,
         };
 
+        // User Control messages SHOULD use message stream ID 0 (known as the control stream)
+        // https://rtmp.veriskope.com/docs/spec/#62-user-control-messages-4
         let stream_begin_payload =
-            stream_begin_message.into_message_payload(self.get_epoch(), stream_id)?;
+            stream_begin_message.into_message_payload(self.get_epoch(), 0)?;
         let stream_begin_packet = self
             .serializer
             .serialize(&stream_begin_payload, false, false)?;
