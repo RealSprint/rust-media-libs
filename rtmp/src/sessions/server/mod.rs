@@ -1285,10 +1285,10 @@ impl ServerSession {
         let reset_packet = self.serializer.serialize(&reset_payload, false, false)?;
 
         Ok(vec![
-            // NetStream.Play.Reset
-            ServerSessionResult::OutboundResponse(reset_packet),
             // UserControlEventType::StreamBegin
             ServerSessionResult::OutboundResponse(stream_begin_packet),
+            // NetStream.Play.Reset
+            ServerSessionResult::OutboundResponse(reset_packet),
             // NetStream.Play.Start
             ServerSessionResult::OutboundResponse(start_packet),
             // |RtmpSampleAccess
