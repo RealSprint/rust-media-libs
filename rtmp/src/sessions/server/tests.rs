@@ -830,8 +830,6 @@ fn can_accept_play_command_with_no_optional_parameters_to_requested_stream_key()
     let (mut responses, _) = split_results(&mut deserializer, accept_results);
     assert_eq!(responses.len(), 4, "Unexpected number of messages received");
 
-    verify_is_onstatus(&responses.remove(0).1, "status", "NetStream.Play.Reset");
-
     match responses.remove(0) {
         (
             _,
@@ -855,6 +853,7 @@ fn can_accept_play_command_with_no_optional_parameters_to_requested_stream_key()
         x => println!("Expected stream begin message, instead received: {:?}", x),
     }
 
+    verify_is_onstatus(&responses.remove(0).1, "status", "NetStream.Play.Reset");
     verify_is_onstatus(&responses.remove(0).1, "status", "NetStream.Play.Start");
 
     match responses.remove(0) {

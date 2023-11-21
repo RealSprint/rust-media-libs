@@ -90,11 +90,6 @@ impl ServerSession {
 
         let mut results = Vec::with_capacity(4);
 
-        let chunk_size_packet = session
-            .serializer
-            .set_max_chunk_size(config.chunk_size, RtmpTimestamp::new(0))?;
-        results.push(ServerSessionResult::OutboundResponse(chunk_size_packet));
-
         let window_ack_message = RtmpMessage::WindowAcknowledgement {
             size: config.window_ack_size,
         };
@@ -104,17 +99,6 @@ impl ServerSession {
             .serialize(&window_ack_payload, true, false)?;
         results.push(ServerSessionResult::OutboundResponse(window_ack_packet));
 
-        let begin_message = RtmpMessage::UserControl {
-            event_type: UserControlEventType::StreamBegin,
-            stream_id: Some(0),
-            timestamp: None,
-            buffer_length: None,
-        };
-
-        let begin_payload = begin_message.into_message_payload(session.get_epoch(), 0)?;
-        let begin_packet = session.serializer.serialize(&begin_payload, true, false)?;
-        results.push(ServerSessionResult::OutboundResponse(begin_packet));
-
         let peer_message = RtmpMessage::SetPeerBandwidth {
             size: config.peer_bandwidth,
             limit_type: PeerBandwidthLimitType::Dynamic,
@@ -122,6 +106,21 @@ impl ServerSession {
         let peer_payload = peer_message.into_message_payload(session.get_epoch(), 0)?;
         let peer_packet = session.serializer.serialize(&peer_payload, true, false)?;
         results.push(ServerSessionResult::OutboundResponse(peer_packet));
+
+        let begin_message = RtmpMessage::UserControl {
+            event_type: UserControlEventType::StreamBegin,
+            stream_id: Some(0),
+            timestamp: None,
+            buffer_length: None,
+        };
+        let begin_payload = begin_message.into_message_payload(session.get_epoch(), 0)?;
+        let begin_packet = session.serializer.serialize(&begin_payload, true, false)?;
+        results.push(ServerSessionResult::OutboundResponse(begin_packet));
+
+        let chunk_size_packet = session
+            .serializer
+            .set_max_chunk_size(config.chunk_size, RtmpTimestamp::new(0))?;
+        results.push(ServerSessionResult::OutboundResponse(chunk_size_packet));
 
         if config.send_on_bw_done_message_on_start {
             let bw_done_message = RtmpMessage::Amf0Command {
@@ -1188,8 +1187,10 @@ impl ServerSession {
             timestamp: None,
         };
 
+        // User Control messages SHOULD use message stream ID 0 (known as the control stream)
+        // https://rtmp.veriskope.com/docs/spec/#62-user-control-messages-4
         let stream_begin_payload =
-            stream_begin_message.into_message_payload(self.get_epoch(), stream_id)?;
+            stream_begin_message.into_message_payload(self.get_epoch(), 0)?;
         let stream_begin_packet = self
             .serializer
             .serialize(&stream_begin_payload, false, false)?;
@@ -1285,10 +1286,10 @@ impl ServerSession {
         let reset_packet = self.serializer.serialize(&reset_payload, false, false)?;
 
         Ok(vec![
-            // NetStream.Play.Reset
-            ServerSessionResult::OutboundResponse(reset_packet),
             // UserControlEventType::StreamBegin
             ServerSessionResult::OutboundResponse(stream_begin_packet),
+            // NetStream.Play.Reset
+            ServerSessionResult::OutboundResponse(reset_packet),
             // NetStream.Play.Start
             ServerSessionResult::OutboundResponse(start_packet),
             // |RtmpSampleAccess
