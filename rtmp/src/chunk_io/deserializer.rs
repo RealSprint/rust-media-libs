@@ -215,7 +215,12 @@ impl ChunkDeserializer {
             }
 
             _ => match self.previous_headers.remove(&csid) {
-                None => return Err(ChunkDeserializationError::NoPreviousChunkOnStream { csid }),
+                None => {
+                    tracing::warn!("Received a non type 0 chunk without a previous header for the same chunk stream id: {}", csid);
+                    let mut new_header = ChunkHeader::new();
+                    new_header.chunk_stream_id = csid;
+                    new_header
+                }
                 Some(header) => header,
             },
         };
@@ -999,6 +1004,33 @@ mod tests {
             &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07],
             "Incorrect payload data"
         );
+    }
+
+    // Instead of throwing an error as would be correct by the RTMP spec, we'll just
+    // create a new header for the stream.
+    #[test]
+    fn no_known_header_creates_new() {
+        let csid = 50;
+        let delta = 10_u32;
+        let type_id2 = 4;
+        let payload = [1_u8, 2_u8, 3_u8];
+
+        let chunk_1_bytes = form_type_1_chunk(csid, delta, type_id2, &payload);
+
+        let mut deserializer = ChunkDeserializer::new();
+
+        let result = deserializer
+            .get_next_message(&chunk_1_bytes)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(result.type_id, type_id2, "Incorrect type id");
+        assert_eq!(
+            result.timestamp,
+            RtmpTimestamp::new(delta),
+            "Incorrect timestamp"
+        );
+        assert_eq!(&result.data[..], &payload[..], "Incorrect data");
     }
 
     fn form_type_0_chunk(
