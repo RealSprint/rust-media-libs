@@ -216,6 +216,7 @@ impl ChunkDeserializer {
 
             _ => match self.previous_headers.remove(&csid) {
                 None => {
+                    tracing::warn!("Received a non type 0 chunk without a previous header for the same chunk stream id: {}", csid);
                     let mut new_header = ChunkHeader::new();
                     new_header.chunk_stream_id = csid;
                     new_header
