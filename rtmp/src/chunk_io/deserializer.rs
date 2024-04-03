@@ -22,7 +22,8 @@ pub struct ChunkDeserializer {
     current_header: ChunkHeader,
     current_stage: ParseStage,
     current_payload: MessagePayload,
-    current_payload_data: BytesMut,
+    /// Stores the data for each chunk stream id until the message is complete
+    payload_data: HashMap<u32, BytesMut>,
     buffer: BytesMut,
     previous_headers: HashMap<u32, ChunkHeader>,
 }
@@ -62,7 +63,7 @@ impl ChunkDeserializer {
             buffer: BytesMut::with_capacity(4096),
             previous_headers: HashMap::new(),
             current_payload: MessagePayload::new(),
-            current_payload_data: BytesMut::new(),
+            payload_data: HashMap::new(),
         }
     }
 
@@ -197,7 +198,7 @@ impl ChunkDeserializer {
     }
 
     fn form_header(&mut self) -> Result<ParseStageResult, ChunkDeserializationError> {
-        if self.buffer.len() < 1 {
+        if self.buffer.is_empty() {
             return Ok(ParseStageResult::NotEnoughBytes);
         }
 
@@ -231,10 +232,14 @@ impl ChunkDeserializer {
             // across multiple chunks.  We need to be careful *NOT* to apply the delta to each
             // type 3 chunk that's trying to serve a single message, otherwise timestamps will
             // get out of control.
-            if self.current_payload_data.len() == 0 {
-                // Since we don't have any payload data yet, that means this is the first
-                // chunk of the message.  As it's the first chunk this is the only time we should
-                // apply the previous header's delta to the timestamp
+            let chunk_stream_message_payload = self
+                .payload_data
+                .entry(self.current_header.chunk_stream_id)
+                .or_insert(BytesMut::with_capacity(
+                    self.current_header.message_length as usize,
+                ));
+
+            if chunk_stream_message_payload.is_empty() {
                 self.current_header.timestamp =
                     self.current_header.timestamp + self.current_header.timestamp_field;
             }
@@ -300,7 +305,7 @@ impl ChunkDeserializer {
             return Ok(ParseStageResult::Success);
         }
 
-        if self.buffer.len() < 1 {
+        if self.buffer.is_empty() {
             return Ok(ParseStageResult::NotEnoughBytes);
         }
 
@@ -349,10 +354,15 @@ impl ChunkDeserializer {
             timestamp = cursor.read_u32::<BigEndian>()?;
         }
 
+        let chunk_stream_message_payload = self
+            .payload_data
+            .entry(self.current_header.chunk_stream_id)
+            .or_insert(BytesMut::with_capacity(4096));
+
         // If the type 3 chunk is not the first chunk of a message, we just ignore it's extended timestamp because the timestamp of this message was already deserialized.
         if self.current_header_format == ChunkHeaderFormat::Full {
             self.current_header.timestamp.set(timestamp);
-        } else if self.current_payload_data.len() == 0 {
+        } else if chunk_stream_message_payload.is_empty() {
             // Since we already added the MAX_INITIAL_TIMESTAMP to the timestamp, only add the delta difference
             self.current_header.timestamp =
                 self.current_header.timestamp + (timestamp - MAX_INITIAL_TIMESTAMP);
@@ -367,10 +377,17 @@ impl ChunkDeserializer {
         message_to_return: &mut Option<MessagePayload>,
     ) -> Result<ParseStageResult, ChunkDeserializationError> {
         let mut length = self.current_header.message_length as usize;
-        let current_payload_length = self.current_payload_data.len();
+
+        let chunk_stream_message_payload = self
+            .payload_data
+            .entry(self.current_header.chunk_stream_id)
+            .or_insert_with(|| BytesMut::with_capacity(length));
+
+        let current_payload_length = chunk_stream_message_payload.len();
+
         let remaining_bytes = length - current_payload_length;
-        if length > self.max_chunk_size as usize {
-            length = min(remaining_bytes, self.max_chunk_size as usize);
+        if length > self.max_chunk_size {
+            length = min(remaining_bytes, self.max_chunk_size);
         }
 
         if self.buffer.len() < length {
@@ -383,18 +400,24 @@ impl ChunkDeserializer {
 
         // Make sure the we have enough capacity for the whole message data.  This
         // helps with performance when there are smaller chunk sizes.
-        if remaining_bytes > self.current_payload_data.remaining_mut() {
-            let capacity_needed = remaining_bytes - self.current_payload_data.remaining_mut();
-            self.current_payload_data.reserve(capacity_needed);
+
+        if remaining_bytes > chunk_stream_message_payload.remaining_mut() {
+            let capacity_needed = remaining_bytes - chunk_stream_message_payload.remaining_mut();
+            chunk_stream_message_payload.reserve(capacity_needed);
         }
 
-        let bytes = self.buffer.split_to(length as usize);
-        self.current_payload_data.extend_from_slice(&bytes[..]);
+        let bytes = self.buffer.split_to(length);
+        chunk_stream_message_payload.extend_from_slice(&bytes[..]);
 
         // Check if this completes the message
-        if self.current_payload_data.len() == self.current_header.message_length as usize {
-            let data = mem::replace(&mut self.current_payload_data, BytesMut::new());
-            self.current_payload.data = data.freeze();
+        if chunk_stream_message_payload.len() == self.current_header.message_length as usize {
+            let chunk_stream_message_payload = self
+                .payload_data
+                .remove(&self.current_header.chunk_stream_id);
+
+            if let Some(chunk_payload) = chunk_stream_message_payload {
+                self.current_payload.data = chunk_payload.freeze();
+            }
 
             let payload = mem::replace(&mut self.current_payload, MessagePayload::new());
             *message_to_return = Some(payload)
@@ -428,7 +451,7 @@ fn get_format(byte: &u8) -> ChunkHeaderFormat {
 fn get_csid(buffer: &[u8]) -> ParsedValue<u32> {
     const CSID_MASK: u8 = 0b00111111;
 
-    if buffer.len() < 1 {
+    if buffer.is_empty() {
         return ParsedValue::NotEnoughBytes;
     }
 
